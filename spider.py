@@ -33,14 +33,19 @@ class node(object):
         if self.depth == max_depth:
             return
         print('crawling: %s', self.url.raw)
-        r = requests.get(self.url.raw)
+        try:
+            r = requests.get(self.url.raw, timeout = 10)
+        except requests.exceptions.Timeout as e:
+            print('Timeout: %s' % self.url.raw)
+            return
         if r.status_code != 200:
-            raise Exception('Error occured when request for %s', self.url.raw)
+            print('Error: Somethring wrong happend when request for %s' % self.url.raw)
+            return
         f = os.open(self.url.name.replace('/','\\'), os.O_CREAT | os.O_RDWR)
         os.write(f, r.content)
         os.close(f)
         urls = []
-        site = bs4.BeautifulSoup(r.content.decode(), 'html5lib')
+        site = bs4.BeautifulSoup(r.content, 'html5lib')
         for i in site.find_all('a'):
             urls.append(i.get('href'))
         
@@ -80,7 +85,7 @@ if __name__ == '__main__':
 
     n = node(st)
     pool.append(st.name)
-    n.exec()
+    n.exec(5)
 
 
 
