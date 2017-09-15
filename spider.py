@@ -1,92 +1,122 @@
-#!/data/data/com.termux/files/usr/bin/python 
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-'This is a toy web spider for web class'
 
 import re
 import os
 import sys
-import codecs
 import requests
 import bs4
 
-
-__author__ = 'gloit'
-
+# store all the visited websites
 pool = []
 
-class url_site(object):
+# the search depth of the first search
+DEPTH = 5
+
+
+class URL:
+
+    """
+    URL: URL string wrapper
+    """
     def __init__(self, url):
+# the raw url string
         self.raw = url
-        print(url)
-        m = re.match('(http|https)://(.+)/?', self.raw)
-        self.valid = m != None
-        if self.valid is not False:
-            self.name = m.groups()[1]
+# accept http or https
+# strip the tailing backslash
+        m = re.match(r"(?:http://|https://|//)?(.+)/?", url)
+
+        self.valid = m is not None
+        if self.valid:
+# fetch the host part
+            self.name = m.group(1)
         else:
             self.name = None
 
-class node(object):
+    def http(self):
+        return r"http://" + self.name;
+
+    def https(self):
+        return r"https://" + self.name;
+
+    def request_string(self):
+        return [self.https(), self.http()]
+
+
+class Node:
+    """
+    Node: a website in the deep-first traverse of the websites
+    """
     def __init__(self, url, depth = 0):
         self.url = url
+# depth is the depth of the current node in the search
         self.depth = depth
-    def exec(self, max_depth= 2):
-        if self.depth == max_depth:
+    def visit(self, max_depth = DEPTH):
+        if self.depth >= max_depth:
             return
-        print('crawling: %s', self.url.raw)
+        print(f"Requesting {self.url.name}...")
+        
+# host for relative href
         try:
-            r = requests.get(self.url.raw, timeout = 10)
-        except requests.exceptions.Timeout as e:
-            print('Timeout: %s' % self.url.raw)
-            return
-        if r.status_code != 200:
-            print('Error: Somethring wrong happend when request for %s' % self.url.raw)
-            return
-        f = os.open(self.url.name.replace('/','\\'), os.O_CREAT | os.O_RDWR)
+            host = re.search(r"(?:(?:https?:)?//)?([^/]+)", self.url.name).group(1)
+        except Exception:
+            host = None
+
+        for req in self.url.request_string():
+            try:
+                print(f"Site: {req}")
+                r = requests.get(req, timeout = 3)
+                if r.status_code != 200:
+                    print("Warning: HTTP response for {req} is {r.status_code} but 200")
+                else:
+                    print("OK")
+                    
+            except requests.exceptions.Timeout:
+                print(f"Request time out : {req}")
+
+# write the result into a file
+# '^' is accepted in both windows and linux filenames, but not in URI
+        f = os.open(self.url.name.replace('/','^'), os.O_CREAT | os.O_RDWR)
         os.write(f, r.content)
         os.close(f)
+
         urls = []
         site = bs4.BeautifulSoup(r.content, 'html5lib')
-        for i in site.find_all('a'):
-            urls.append(i.get('href'))
-        
 
+        for tag in site.find_all('a'):
+            urls.append(tag.get("href"))
+        
         for url in urls:
-            if url == None:
+            if url is None:
                 continue
-            st = url_site(url)
-            if st.valid == False:
-                print('not valid: %s' % url)
+# add host if started with a slash
+            if url[0] == '/':
+                url = host + url
+            searchTask = URL(url)
+            if not searchTask.valid:
+                print(f"Invalid URL: {searchTask.url}")
                 continue
             else:
+
+# if the website has been visited
                 if url in pool:
-                    print('duplicated: %s' % url)
                     continue
                 else:
-                    print('valid: %s' % url)
                     pool.append(url)
-                    n = node(st, self.depth + 1)
-                    n.exec(max_depth)
+                    n = Node(searchTask, self.depth + 1)
+                    n.visit(max_depth)
 
 if __name__ == '__main__':
-    if(len(sys.argv) == 1):
-        print("usage: python spider.py [url]")
+    if len(sys.argv) < 2:
+        print("Usage: python spider.py [url]")
         sys.exit(0)
-    else:
-        try:
-            assert(len(sys.argv) > 1)
-        except AssertionError:
-            print('Error: too many parameters. Specify one url at a time!')
 
-    st = url_site(sys.argv[1])
-    if st.valid == False:
-        print('Error: please give a valid url!')
-        print(st.raw)
-        sys.exit(-1)
+    searchTask = URL(sys.argv[1])
+    if not searchTask.valid:
+        print("Invalid url")
+        sys.exit(1)
 
-    n = node(st)
-    pool.append(st.name)
-    n.exec(5)
+    n = Node(searchTask)
+    pool.append(searchTask.name)
+    n.visit(DEPTH)
 
-
-
-            
