@@ -11,7 +11,7 @@ import bs4
 pool = []
 
 # the search depth of the first search
-DEPTH = 5
+DEPTH = 2
 
 
 class URL:
@@ -62,6 +62,8 @@ class Node:
         except Exception:
             host = None
 
+# indicate if the request is successful
+        flag = False
         for req in self.url.request_string():
             try:
                 print(f"Site: {req}")
@@ -70,9 +72,14 @@ class Node:
                     print("Warning: HTTP response for {req} is {r.status_code} but 200")
                 else:
                     print("OK")
-                    
+                    flag = True
             except requests.exceptions.Timeout:
                 print(f"Request time out : {req}")
+            except Exception:
+                print(f"Failed to connect : {req}")
+
+        if not flag:
+            return
 
 # write the result into a file
 # '^' is accepted in both windows and linux filenames, but not in URI
@@ -87,7 +94,7 @@ class Node:
             urls.append(tag.get("href"))
         
         for url in urls:
-            if url is None:
+            if url is None or not len(url):
                 continue
 # add host if started with a slash
             if url[0] == '/':
